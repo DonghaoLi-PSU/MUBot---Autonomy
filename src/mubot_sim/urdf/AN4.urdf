@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot
+  name="mubot">
+
+
+<!--Defination of links: head, body, peduncle and tail -->
+
+
+<link
+  name="dummy_link">
+  <inertial>
+    <origin
+      xyz="0.02857 0.0 0.0"
+      rpy="0 0 0" />
+    <mass
+      value="1.967E-02" />
+    <inertia
+      ixx="5.351E-07"
+      ixy="0.0"
+      ixz="0.0"
+      iyy="7.136E-07"
+      iyz="0.0"
+      izz="6.043E-06" />
+  </inertial>
+  <visual>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_head.STL" scale="1 1 1"/>
+    </geometry>
+    <material
+      name="">
+      <color
+        rgba="1 0 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_head.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link
+  name="segment_body_1">
+  <inertial>
+    <origin
+      xyz="0.01170 0.0 0.0"
+      rpy="0 0 0" />
+    <mass
+      value="1.975E-02" />
+    <inertia
+      ixx="6.205E-07"
+      ixy="0.0"
+      ixz="0.0"
+      iyy="8.904E-07"
+      iyz="0.0"
+      izz="2.018E-06" />
+  </inertial>
+  <visual>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material
+      name="">
+      <color
+        rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+
+<link name="segment_head">
+</link>
+<joint
+name="dummy joint" type="fixed">
+<parent
+  link="segment_head" />
+<child
+  link="dummy_link" />
+</joint>
+
+
+<link
+  name="segment_body_2">
+  <inertial>
+    <origin
+      xyz="0.01170 0.0 0.0"
+      rpy="0 0 0" />
+    <mass
+      value="1.975E-02" />
+      <inertia
+        ixx="6.205E-07"
+        ixy="0.0"
+        ixz="0.0"
+        iyy="8.904E-07"
+        iyz="0.0"
+        izz="2.018E-06" />
+    </inertial>
+  <visual>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material
+      name="">
+      <color
+        rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link
+  name="segment_body_3">
+  <inertial>
+    <origin
+      xyz="0.01170 0.0 0.0"
+      rpy="0 0 0" />
+    <mass
+      value="1.975E-02" />
+      <inertia
+        ixx="6.205E-07"
+        ixy="0.0"
+        ixz="0.0"
+        iyy="8.904E-07"
+        iyz="0.0"
+        izz="2.018E-06" />
+    </inertial>
+  <visual>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material
+      name="">
+      <color
+        rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link
+  name="segment_peduncle">
+  <inertial>
+    <origin
+      xyz="0.007515 0.0 0.0"
+      rpy="0 0 0" />
+    <mass
+      value="1.418E-02" />
+    <inertia
+      ixx="5.040E-07"
+      ixy="0.0"
+      ixz="0.0"
+      iyy="3.564E-07"
+      iyz="0.0"
+      izz="1.109E-06" />
+  </inertial>
+  <visual>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_tail.STL" scale="1 1 1"/>
+    </geometry>
+    <material
+      name="">
+      <color
+        rgba="0 0 1 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_tail.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link
+  name="segment_tip">
+  <inertial>
+    <origin
+      xyz="0.01400 0.0 0.0"
+      rpy="0 0 0" />
+    <mass
+      value="1.003E-02" />
+    <inertia
+      ixx="2.567E-08"
+      ixy="0.0"
+      ixz="0.0"
+      iyy="4.882E-08"
+      iyz="0.0"
+      izz="1.730E-06" />
+  </inertial>
+  <visual>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_tip.STL" scale="1 1 1"/>
+    </geometry>
+    <material
+      name="">
+      <color
+        rgba="0 0 1 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <geometry>
+      <mesh
+        filename="package://des_mubot/meshes/segment_tip.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+
+<!--Defination of joints: joint0-joint5-->
+<joint
+name="joint_a0"
+type="revolute">
+<origin
+  xyz="0.041 0 0"
+  rpy="0 0 0" />
+<parent
+  link="segment_head" />
+<child
+  link="segment_body_1" />
+<axis
+  xyz="0 0 1" />
+<limit
+  lower="-1.57"
+  upper="1.57"
+  effort="10"
+  velocity="10" />
+</joint>
+
+<joint
+name="joint_a1"
+type="revolute">
+<origin
+  xyz="0.02675 0 0"
+  rpy="0 0 0" />
+<parent
+  link="segment_body_1" />
+<child
+  link="segment_body_2" />
+<axis
+  xyz="0 0 1" />
+<limit
+  lower="-1.57"
+  upper="1.57"
+  effort="10"
+  velocity="10" />
+</joint>
+
+<joint
+name="joint_a2"
+type="revolute">
+<origin
+  xyz="0.02675 0 0"
+  rpy="0 0 0" />
+<parent
+  link="segment_body_2" />
+<child
+  link="segment_body_3" />
+<axis
+  xyz="0 0 1" />
+<limit
+  lower="-1.57"
+  upper="1.57"
+  effort="10"
+  velocity="10" />
+</joint>
+
+<joint
+name="joint_a3"
+type="revolute">
+<origin
+  xyz="0.02675 0 0"
+  rpy="0 0 0" />
+<parent
+  link="segment_body_3" />
+<child
+  link="segment_peduncle" />
+<axis
+  xyz="0 0 1" />
+<limit
+  lower="-1.57"
+  upper="1.57"
+  effort="10"
+  velocity="10" />
+</joint>
+
+<joint
+name="joint_p0"
+type="revolute">
+<origin
+  xyz="0.02175 0 0"
+  rpy="0 0 0" />
+<parent
+  link="segment_peduncle" />
+<child
+  link="segment_tip" />
+<axis
+  xyz="0 0 1" />
+<limit
+  lower="-1.57"
+  upper="1.57"
+  effort="10"
+  velocity="10" />
+</joint>
+
+
+<gazebo reference="dummy_link">
+    <material>Gazebo/Red</material>
+</gazebo>
+
+<gazebo reference="segment_body_1">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+<gazebo reference="segment_body_2">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+<gazebo reference="segment_body_3">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+
+<gazebo reference="segment_peduncle">
+    <material>Gazebo/Orange</material>
+</gazebo>
+
+<gazebo reference="segment_tip">
+    <material>Gazebo/Blue</material>
+</gazebo>
+
+<!--Defination of plugins-->
+<gazebo>
+    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+        <robotNamespace>/mubot</robotNamespace>
+    </plugin>
+</gazebo>
+
+<gazebo>
+        <plugin name="Actuator_control" filename="libactuator_4.so"/>
+        <plugin name="Hydro_Plugin" filename="libHydro_4.so"/>
+</gazebo>
+
+
+</robot>

@@ -1,0 +1,36 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <world name="default">
+
+    <physics name="mubot_physics" type="ode">
+      <max_step_size>0.00025</max_step_size>
+      <real_time_update_rate>0</real_time_update_rate>
+      <ode>
+        <solver>
+            <type>quick</type>
+            <iters>150</iters>
+        </solver>
+      </ode>
+    </physics>
+
+    <!-- neutral buoyancy/gravity -->
+    <gravity>0 0 0</gravity>
+
+    <!-- Gz sim system -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+
+    
+    <!-- <include>
+      <uri>file:///home/donghaoli/new_mubot/src/mubot_sim/urdf/mubot.urdf</uri>
+      <name>mubot_AN4</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include> -->
+   
+
+  </world>
+</sdf>

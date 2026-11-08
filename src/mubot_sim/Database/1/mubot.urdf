@@ -1,0 +1,130 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<robot name="mubot_1">
+  <link name="head">
+    <inertial>
+      <origin xyz="0.005 0 0" rpy="0 0 0"/>
+      <mass value="0.511799"/>
+      <inertia ixx="2.13665e-05" ixy="0.0" ixz="0.0" iyy="2.13665e-05" iyz="0.0" izz="4.06981e-05"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.005 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.01 0.0075 0.01"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="body_1">
+    <inertial>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <mass value="9.28319"/>
+      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.0075 0.02"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="body_2">
+    <inertial>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <mass value="9.28319"/>
+      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.0075 0.02"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="body_3">
+    <inertial>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <mass value="9.28319"/>
+      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.0075 0.02"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="body_4">
+    <inertial>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <mass value="9.28319"/>
+      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.01 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.02 0.0075 0.02"/>
+      </geometry>
+    </visual>
+  </link>
+  <link name="tailtra_3">
+    <inertial>
+      <origin xyz="0.016 0 0" rpy="0 0 0"/>
+      <mass value="15.6726"/>
+      <inertia ixx="0.00111721" ixy="0.0" ixz="0.0" iyy="0.00111721" iyz="0.0" izz="0.00212802"/>
+    </inertial>
+    <visual>
+      <origin xyz="0.016 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.03 0.002 0.03"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="joint_0" type="revolute">
+    <origin xyz="0.0101 0 0" rpy="0 0 0"/>
+    <parent link="head"/>
+    <child link="body_1"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.79" upper="0.79" effort="10" velocity="10"/>
+    <dynamics damping="0.007534" friction="0.0"/>
+  </joint>
+  <joint name="joint_1" type="revolute">
+    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
+    <parent link="body_1"/>
+    <child link="body_2"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
+    <dynamics damping="0.021229" friction="0.0"/>
+  </joint>
+  <joint name="joint_2" type="revolute">
+    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
+    <parent link="body_2"/>
+    <child link="body_3"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
+    <dynamics damping="0.021229" friction="0.0"/>
+  </joint>
+  <joint name="joint_3" type="revolute">
+    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
+    <parent link="body_3"/>
+    <child link="body_4"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
+    <dynamics damping="0.021229" friction="0.0"/>
+  </joint>
+  <joint name="joint_4" type="revolute">
+    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
+    <parent link="body_4"/>
+    <child link="tailtra_3"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
+    <dynamics damping="0.023822" friction="0.0"/>
+  </joint>
+  <gazebo>
+    <plugin filename="mubot_actuator" name="mubot::ActuatorPlugin">
+      <database_dir>/home/donghaoli/new_mubot/src/mubot_sim/Database</database_dir>
+      <explicit_spring>true</explicit_spring>
+    </plugin>
+    <plugin filename="mubot_hydro" name="mubot::HydroPlugin">
+      <database_dir>/home/donghaoli/new_mubot/src/mubot_sim/Database</database_dir>
+    </plugin>
+  </gazebo>
+</robot>
