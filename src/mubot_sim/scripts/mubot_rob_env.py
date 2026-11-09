@@ -2,15 +2,8 @@
 """
 MubotEnv for ROS 2 (Jazzy) + Gazebo Harmonic.
 
-One rollout = one fresh simulator process:
-  1. ros2 launch mubot_sim mubot_arg.launch.py   (started paused, headless)
-  2. wait until both plugins report "CSV and URDF matching" in sim.log
-  3. unpause through /world/<name>/control (ros_gz_bridge)
-  4. wait for terminate.txt written by the Hydro plugin
-  5. pause, kill the whole process group, clean temp files
-
-Requires the launch file to accept `run:=false` and to start the control bridge
-(see the notes that came with this file).
+One simulator for each thread only.
+Simulators get reset for each rollout.
 
 Original (ROS 1) by donghao Li.
 """
@@ -47,7 +40,11 @@ class MubotEnv:
                  world_name='default', domain_id=None,
                  startup_timeout=60.0, rollout_timeout=10.0):
         print("\33[92mInitializing MubotEnv\033[0m")
-        self.worker_folder = os.path.abspath(worker_folder) + "/"   # Database/<wk_id>/
+        self._conn = None
+        self._n_since_start = 0
+        self.restart_every = 300      
+        self.reset_timeout = 10.0
+        self.worker_folder = os.path.abspath(worker_folder) + "/"   
         self.database_dir = os.path.dirname(os.path.abspath(worker_folder))
         self.max_sim_time = max_time
         self.wk_id = wk_id
@@ -75,7 +72,21 @@ class MubotEnv:
         self._log = None
         atexit.register(self.shutdown)
         print("\33[92mMubotEnv initialized\033[0m")
+        self._sweep_stale()
 
+
+    def _sweep_stale(self):
+        p = self.worker_folder + 'sim.pgid'
+        try:
+            pgid = int(open(p).read())
+            if b'mubot.launch.py' in open(f'/proc/{pgid}/cmdline', 'rb').read():
+                os.killpg(pgid, signal.SIGKILL)
+        except (FileNotFoundError, ValueError, ProcessLookupError, PermissionError):
+            pass
+        try:
+            os.remove(p)
+        except FileNotFoundError:
+            pass
     # ------------------------------------------------------------------
     # simulator process
     # ------------------------------------------------------------------
@@ -86,12 +97,13 @@ class MubotEnv:
             'ROS_DOMAIN_ID': str(self.domain_id),
             'ROS_LOG_DIR': self.ros_log_dir,
             'MUBOT_DATABASE_DIR': self.database_dir,
-            'PYTHONUNBUFFERED': '1',          # so sim.log fills in real time
+            'PYTHONUNBUFFERED': '1',
         })
         return env
 
     def _start_sim(self):
-        cmd = ['ros2', 'launch', 'mubot_sim', 'mubot_arg.launch.py',
+        self._sweep_stale()
+        cmd = ['ros2', 'launch', 'mubot_sim', 'mubot.launch.py',
                f'robot_name:={self.robot_name}',
                f'urdf_path:={self.worker_folder}mubot.urdf',
                f'database_dir:={self.database_dir}',
@@ -101,7 +113,10 @@ class MubotEnv:
         self._proc = subprocess.Popen(
             cmd, stdout=self._log, stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL, env=self._child_env(),
-            start_new_session=True)           # own process group -> killable as a unit
+            start_new_session=True)           
+        with open(self.worker_folder + 'sim.pgid', 'w') as f:
+            f.write(str(self._proc.pid))
+
 
     def _read_log(self):
         try:
@@ -140,9 +155,15 @@ class MubotEnv:
             raise RuntimeError("terminate.txt exists but drift_metrics.csv is missing")
 
     def _stop_sim(self):
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
         proc, self._proc = self._proc, None
         if proc is not None:
-            pgid = proc.pid                   # start_new_session => pgid == pid
+            pgid = proc.pid                   
             for sig, wait in ((signal.SIGINT, 8.0), (signal.SIGTERM, 3.0), (signal.SIGKILL, 3.0)):
                 try:
                     os.killpg(pgid, sig)
@@ -153,40 +174,80 @@ class MubotEnv:
                     break
                 except subprocess.TimeoutExpired:
                     continue
-            try:                              # sweep stragglers (gz server can outlive launch)
+            try:                             
                 os.killpg(pgid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            self._cleanup_ros_logs()
+        try:
+            os.remove(self.worker_folder + 'sim.pgid')
+        except FileNotFoundError:
+            pass
         if self._log is not None:
             self._log.close()
             self._log = None
 
+
+    def _ensure_sim(self):
+        """Start the simulator only if it is not already running."""
+        if (self._proc is not None and self._proc.poll() is None
+                and self._conn is not None and self._n_since_start < self.restart_every):
+            return
+        self._stop_sim()
+        self._start_sim()
+        self._wait_ready()
+        self._conn = GazeboConnection(self.node, self.world_name,
+                                    timeout=5.0, connect_timeout=30.0)
+        self._n_since_start = 0
+
+    def _log_size(self):
+        try:
+            return os.path.getsize(self.worker_folder + 'sim.log')
+        except FileNotFoundError:
+            return 0
+
+    def _log_since(self, pos):
+        try:
+            with open(self.worker_folder + 'sim.log', 'rb') as f:
+                f.seek(pos)
+                return f.read().decode(errors='replace')
+        except FileNotFoundError:
+            return ''
+
+    def _reset_world(self):
+        pos = self._log_size()
+        if not self._conn.reset_world():
+            raise RuntimeError("world reset request failed")
+        ack = self.worker_folder + 'reset_ack.txt'
+        t0 = time.monotonic()
+        while not os.path.exists(ack):
+            if 'plugin disabled' in self._log_since(pos):
+                raise RuntimeError("plugin failed during reset, see sim.log")
+            if self._proc.poll() is not None:
+                raise RuntimeError("sim died during reset, see sim.log")
+            if time.monotonic() - t0 > self.reset_timeout:
+                raise TimeoutError(f"no reset ack after {self.reset_timeout:.0f}s")
+            time.sleep(0.02)
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
+
     def step(self) -> bool:
-        """Run one rollout. Returns True if drift_metrics.csv is ready."""
-        self._remove_files('terminate.txt', '/record/drift_metrics.csv')   # never trust stale files
-        conn = None
+        """Run one rollout on the persistent sim. Returns True if drift_metrics.csv is ready."""
+        self._remove_files('terminate.txt', 'reset_ack.txt', '/record/drift_metrics.csv','init_state.csv')
         ok = False
         try:
-            self._start_sim()
-            self._wait_ready()
-            conn = GazeboConnection(self.node, self.world_name,
-                                    timeout=5.0, connect_timeout=30.0)
-            if not conn.unpause_sim():
+            self._ensure_sim()          
+            self._reset_world()        
+            if not self._conn.unpause_sim():
                 raise RuntimeError("could not unpause the simulation")
             self._wait_terminate()
-            conn.pause_sim()
+            self._conn.pause_sim()
+            self._n_since_start += 1
             ok = True
         except (RuntimeError, TimeoutError) as e:
             print(f"\33[91m[MubotEnv {self.wk_id}] rollout failed: {e}\33[0m")
-        finally:
-            if conn is not None:
-                conn.close()
             self._stop_sim()
-            self._cleanup_ros_logs()
-        time.sleep(0.2)
         return ok
 
     def read_metrics(self):

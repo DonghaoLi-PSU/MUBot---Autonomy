@@ -56,6 +56,7 @@ namespace
 class ActuatorPlugin
     : public gz::sim::System,
       public gz::sim::ISystemConfigure,
+      public gz::sim::ISystemReset,
       public gz::sim::ISystemPreUpdate
 {
 public:
@@ -159,6 +160,29 @@ public:
                 volt_out_ << "," << voltage_[i];
             }
             volt_out_ << "\n";
+        }
+    }
+    
+    void Reset(const gz::sim::UpdateInfo& /*_info*/,
+           gz::sim::EntityComponentManager& _ecm) override
+    {
+        try {
+            if (act_out_.is_open())  act_out_.close();
+            if (volt_out_.is_open()) volt_out_.close();
+            output_files_initialized_ = false;
+
+            Load_Control_Signal(path_ + "/control_signal.csv");
+
+            // Belt and braces in case the world reset does not restore joint state.
+            for (auto& j : joints_) {
+                j.ResetPosition(_ecm, {0.0});
+                j.ResetVelocity(_ecm, {0.0});
+            }
+            configured_ = true;
+        }
+        catch (const std::exception& e) {
+            gzerr << e.what() << " -- Actuator plugin disabled." << std::endl;
+            configured_ = false;
         }
     }
 
@@ -346,6 +370,7 @@ private:
 GZ_ADD_PLUGIN(mubot::ActuatorPlugin,
               gz::sim::System,
               mubot::ActuatorPlugin::ISystemConfigure,
+              mubot::ActuatorPlugin::ISystemReset,
               mubot::ActuatorPlugin::ISystemPreUpdate)
 
 GZ_ADD_PLUGIN_ALIAS(mubot::ActuatorPlugin, "mubot::ActuatorPlugin")

@@ -2,7 +2,7 @@ import time, rclpy
 from rclpy.node import Node
 from ros_gz_interfaces.msg import WorldControl
 from ros_gz_interfaces.srv import ControlWorld
-
+from ros_gz_interfaces.msg import WorldControl, WorldReset
 
 class GazeboConnection:
     def __init__(self, node: Node, world_name: str = 'default',
@@ -14,7 +14,6 @@ class GazeboConnection:
         self.srv_name = f'/world/{world_name}/control'
         self.cli = node.create_client(ControlWorld, self.srv_name)
 
-        # Bounded wait: if the sim or bridge died we must fail, not hang forever.
         deadline = time.monotonic() + connect_timeout
         while not self.cli.wait_for_service(timeout_sec=0.5):
             if time.monotonic() > deadline:
@@ -38,7 +37,6 @@ class GazeboConnection:
                 if future.result().success:
                     return True
             else:
-                # drop the dead request so it cannot leak / fire later
                 future.cancel()
                 try:
                     self.cli.remove_pending_request(future)
@@ -55,6 +53,9 @@ class GazeboConnection:
 
     def unpause_sim(self) -> bool:
         return self._call(pause=False)
+    
+    def reset_world(self) -> bool:
+        return self._call(pause=True, reset=WorldReset(all=True))
 
     def step(self, n: int = 1) -> bool:
         """Advance n physics steps, then stay paused (not retried: not idempotent)."""

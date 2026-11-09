@@ -1,11 +1,13 @@
 /* Hydrodynamics Force Plugin for MUBot Project
  * Gazebo Harmonic (gz-sim8) system plugin, with rollout drift metrics.
 
- * To increase accuracy, the density of fluid and robot are amplified 1k times, 
+ * To increase accuracy, the density of fluid and robot are amplified 1000 times, 
  * so applying 'scaling'for torque output
  *
  * Created by Donghao Li
  * Ported to gz-sim (ISystemConfigure + ISystemPreUpdate).
+ * 
+ * Hydrodynamic plugin is paused for first step to let simulator reset link acc
  */
 
 #include "mubot_sim/mubot_common.hh"
@@ -31,6 +33,7 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <cstdio>
 
 using gz::math::Pose3d;
 using gz::math::Vector3d;
@@ -78,6 +81,7 @@ namespace
 class HydroPlugin
     : public gz::sim::System,
       public gz::sim::ISystemConfigure,
+      public gz::sim::ISystemReset,
       public gz::sim::ISystemPreUpdate
 {
 public:
@@ -130,12 +134,16 @@ public:
         //-------------------------------------
         // Debugging
         //-------------------------------------
-        if (simu_step % 2000 == 0) {
-            gzerr << " Time: " << simu_time << std::endl;
-        }
-        if (simu_step == 20) {
-            gzerr << "Hydro Start" << std::endl;
-        }
+        // if (simu_step <=3){
+        //     gzerr<<"after reset: "<<after_reset_<<std::endl;
+        // }
+
+        // if (simu_step % 2000 == 0) {
+        //     gzerr << " Time: " << simu_time << std::endl;
+        // }
+        // if (simu_step == 20) {
+        //     gzerr << "Hydro Start" << std::endl;
+        // }
 
         const size_t N = links_.size();
         if (N == 0 || params_.size() != N) return;
@@ -166,9 +174,12 @@ public:
             if (!(P.M_total > 1e-9)) continue;
 
             const Vector3d WLV = *wlv;
-            const Vector3d WLA = *wla;
+            // const Vector3d WLA = *wla;
             const Vector3d WAV = *wav;
-            const Vector3d WAA = *waa;
+            // const Vector3d WAA = *waa;
+
+            const Vector3d WLA = after_reset_ ? Vector3d::Zero : *wla;
+            const Vector3d WAA = after_reset_ ? Vector3d::Zero : *waa;
 
             const double vel_yaw = WAV.Z();
             const double acc_yaw = WAA.Z();
@@ -257,6 +268,26 @@ public:
             link.AddWorldWrench(_ecm, f_world, Vector3d(0.0, 0.0, tz),Vector3d(-P.cog,0,0));
         }
 
+        // if (simu_step == 10) {                 // first step after reset = the state the rollout starts from
+        //     std::ofstream out(path_ + "/init_state.csv", std::ios::out);
+        //     if (out.is_open()) {
+        //         out << std::scientific << std::setprecision(6);
+        //         out << "link,x,y,yaw,vx,vy,wz,ax,ay,alpha_z\n";
+        //         for (size_t i = 0; i < N; ++i) {
+        //             const auto wlv = links_[i].WorldLinearVelocity(_ecm);
+        //             const auto wla = links_[i].WorldLinearAcceleration(_ecm);
+        //             const auto wav = links_[i].WorldAngularVelocity(_ecm);
+        //             const auto waa = links_[i].WorldAngularAcceleration(_ecm);
+        //             if (!wlv || !wla || !wav || !waa) continue;
+        //             out << i << ","
+        //                 << WP_[i].Pos().X() << "," << WP_[i].Pos().Y() << "," << WP_[i].Rot().Yaw() << ","
+        //                 << wlv->X() << "," << wlv->Y() << "," << wav->Z() << ","
+        //                 << wla->X() << "," << wla->Y() << "," << waa->Z() << "\n";
+        //         }
+        //     }
+        // }
+
+        after_reset_ = false;
         // MUBot state recording
         if ((simu_step >= record_step) && (simu_time <= eval_end_time_ + 0.5)) {
             Record_File_Create();
@@ -285,12 +316,42 @@ public:
             const std::string term = path_ + "/terminate.txt";
             if (!File_Exists(term)) {
                 std::ofstream(term, std::ios::out).close();
+                if (disp_out_.is_open())  disp_out_.flush();
+                if (force_out_.is_open()) force_out_.flush();
                 gzmsg << "Hydro Terminate Created" << std::endl;
             }
         }
     }
 
-private:
+    void Reset(const gz::sim::UpdateInfo& _info,
+            gz::sim::EntityComponentManager& _ecm) override
+    {
+        try {
+            // per-rollout files are re-created (truncated) on the next record
+            for (auto* f : {&force_out_, &disp_out_, &metric_out_})
+                if (f->is_open()) f->close();
+            record_files_initialized_ = false;
+            after_reset_ = true;
+
+            std::remove((path_ + "/terminate.txt").c_str());
+
+            Load_Control_Frequency(_ecm, path_ + "/control_signal.csv");
+            Prepare_Eval_Window();
+            Reset_Drift_Metrics();
+            configured_ = true;
+
+            gzmsg << "[Hydro] reset, sim time = "
+                << std::chrono::duration<double>(_info.simTime).count() << std::endl;
+
+            // ack for Python; written last, after everything above succeeded
+            std::ofstream(path_ + "/reset_ack.txt", std::ios::out).close();
+        }
+        catch (const std::exception& e) {
+            gzerr << e.what() << " -- Hydro plugin disabled." << std::endl;
+            configured_ = false;
+        }
+    }
+    private:
     struct HydroParam {
         double M_total = 0.0;
         double M_S     = 0.0;
@@ -635,12 +696,15 @@ private:
     std::ofstream force_out_;
     std::ofstream disp_out_;
     std::ofstream metric_out_;
+
+    bool after_reset_ = false;
 };
 }  // namespace mubot
 
 GZ_ADD_PLUGIN(mubot::HydroPlugin,
               gz::sim::System,
               mubot::HydroPlugin::ISystemConfigure,
-              mubot::HydroPlugin::ISystemPreUpdate)
+              mubot::HydroPlugin::ISystemPreUpdate,
+              mubot::HydroPlugin::ISystemReset)
 
 GZ_ADD_PLUGIN_ALIAS(mubot::HydroPlugin, "mubot::HydroPlugin")

@@ -3,9 +3,9 @@
 EM-PGPE training for MUBot (ROS 2 Jazzy + Gazebo Harmonic).
 
 Run from a shell where ROS and the workspace are sourced:
-    python start_empgpe.py --wk-id default
-    python start_empgpe.py --wk-id 3 --mode continue
-    python start_empgpe.py --wk-id 3 --mode rerun --morph-id 17
+    python start_empgpe.py
+    python start_empgpe.py --wk-id 1 --mode continue
+    python start_empgpe.py --wk-id 1 --mode rerun --morph-id 17
 """
 
 import argparse
@@ -39,7 +39,6 @@ class MubotPGPE:
     @staticmethod
     def _schedule(joint_num, continuing=False):
         """return (n_rollout, n_episodes) depends on the size of mubot."""
-        # return 4,2
         if joint_num <= 7:
             return 40, 10 * 2
         if joint_num <= 9:
@@ -73,7 +72,7 @@ class MubotPGPE:
     # ------------------------------------------------------------------
     def run_pgpe(self, wk_id, joint_num):
         # clean stale files
-        for f in ('cpg_history.csv', 'rollout_history.csv', 'reward_history.csv'): 
+        for f in ('history_cpg.csv', 'history_rollout.csv', 'history_reward.csv'): 
             if os.path.exists(self.file_path + f):
                 os.remove(self.file_path + f)
         self.wk_id = wk_id
@@ -95,7 +94,7 @@ class MubotPGPE:
         record_mu[0, -1] = random.uniform(0, 10);   record_sigma[0, -1] = 2.5             # frequency
 
         empgpe = EMPGPE(n_param, n_rollout, joint_num, n_select)
-        self._csv_write('cpg_history.csv', np.hstack((record_mu[0, :], record_sigma[0, :])), mode='w')
+        self._csv_write('history_cpg.csv', np.hstack((record_mu[0, :], record_sigma[0, :])), mode='w')
         for x in range(n_episodes):
             sl = slice(x * n_rollout, (x + 1) * n_rollout)
             record_cpg[sl, :] = empgpe.sample_params(record_mu[x, :], record_sigma[x, :])
@@ -103,15 +102,17 @@ class MubotPGPE:
             for y in range(n_rollout):
                 self._announce(x, y, n_episodes, n_rollout)
                 idx = x * n_rollout + y
-                temp_input = record_cpg[idx, :]
+                # temp_input = record_cpg[idx, :]
+                temp_input = np.array([10,10,-0.1,10,-.2,10,-.3,10,-.4,2])
                 record_sta[idx, :], record_reward[x, y] = self._rollout(temp_input)
                 mo_y = 'w' if (x == 0 and y == 0) else 'a'
-                self._csv_write('rollout_history.csv', np.hstack((temp_input, record_reward[x, y])), mode=mo_y)
+                self._csv_write('history_rollout.csv', np.hstack((temp_input, record_reward[x, y])), mode=mo_y)
                 self._csv_write('/record/drift_history.csv', record_sta[idx, :], mode=mo_y)
+
             record_mu[x+1, :], record_sigma[x+1, :], _ = empgpe.learn(
                 record_cpg[sl, :], record_reward[x, :], record_mu[x, :], record_sigma[x, :])
-            self._csv_write('cpg_history.csv', np.hstack((record_mu[x+1, :], record_sigma[x+1, :])))
-            self._csv_write('reward_history.csv', record_reward[x, :], mode='w' if x == 0 else 'a')
+            self._csv_write('history_cpg.csv', np.hstack((record_mu[x+1, :], record_sigma[x+1, :])))
+            self._csv_write('history_reward.csv', record_reward[x, :], mode='w' if x == 0 else 'a')
             mean_reward = np.mean(record_reward[x, :]); std_reward = np.std(record_reward[x, :])
             if (std_reward <= mean_reward * 0.1) and (x >= n_episodes * 0.5):
                 print("Early converged at episode: " + str(x + 1))
@@ -134,12 +135,12 @@ class MubotPGPE:
         record_sta = np.zeros(((n_episodes + 1) * n_rollout, 4))
 
         # history; incomplete rollouts of the last episode are dropped
-        cpg_hist = pd.read_csv(self.file_path + 'cpg_history.csv', header=None, index_col=None).to_numpy()
+        cpg_hist = pd.read_csv(self.file_path + 'history_cpg.csv', header=None, index_col=None).to_numpy()
         ep_comp = cpg_hist.shape[0] - 1
-        reward_hist = pd.read_csv(self.file_path + 'reward_history.csv', header=None, index_col=None).to_numpy()[:ep_comp, :]
-        pd.DataFrame(reward_hist).to_csv(self.file_path + 'reward_history.csv', float_format='%.8f', header=None, index=None, mode='w')
-        rollout_hist = pd.read_csv(self.file_path + 'rollout_history.csv', header=None, index_col=None).to_numpy()[:ep_comp * n_rollout, :]
-        pd.DataFrame(rollout_hist).to_csv(self.file_path + 'rollout_history.csv', float_format='%.8f', header=None, index=None, mode='w')
+        reward_hist = pd.read_csv(self.file_path + 'history_reward.csv', header=None, index_col=None).to_numpy()[:ep_comp, :]
+        pd.DataFrame(reward_hist).to_csv(self.file_path + 'history_reward.csv', float_format='%.8f', header=None, index=None, mode='w')
+        rollout_hist = pd.read_csv(self.file_path + 'history_rollout.csv', header=None, index_col=None).to_numpy()[:ep_comp * n_rollout, :]
+        pd.DataFrame(rollout_hist).to_csv(self.file_path + 'history_rollout.csv', float_format='%.8f', header=None, index=None, mode='w')
 
         record_mu[:ep_comp+1, :] = cpg_hist[:ep_comp+1, :n_param]
         record_sigma[:ep_comp+1, :] = cpg_hist[:ep_comp+1, n_param:]
@@ -157,12 +158,12 @@ class MubotPGPE:
                 idx = x * n_rollout + y
                 temp_input = record_cpg[idx, :]
                 record_sta[idx, :], record_reward[x, y] = self._rollout(temp_input)
-                self._csv_write('rollout_history.csv', np.hstack((temp_input, record_reward[x, y])))
+                self._csv_write('history_rollout.csv', np.hstack((temp_input, record_reward[x, y])))
                 self._csv_write('drift_history.csv', record_sta[idx, :])
             record_mu[x+1, :], record_sigma[x+1, :], _ = empgpe.learn(
                 record_cpg[sl, :], record_reward[x, :], record_mu[x, :], record_sigma[x, :])
-            self._csv_write('cpg_history.csv', np.hstack((record_mu[x+1, :], record_sigma[x+1, :])))
-            self._csv_write('reward_history.csv', record_reward[x, :], mode='w' if x == 0 else 'a')
+            self._csv_write('history_cpg.csv', np.hstack((record_mu[x+1, :], record_sigma[x+1, :])))
+            self._csv_write('history_reward.csv', record_reward[x, :], mode='w' if x == 0 else 'a')
             mean_reward = np.mean(record_reward[x, :]); std_reward = np.std(record_reward[x, :])
             if (std_reward <= mean_reward * 0.1) and (x >= n_episodes * 0.5):
                 print("Early converged at episode: " + str(x + 1))
