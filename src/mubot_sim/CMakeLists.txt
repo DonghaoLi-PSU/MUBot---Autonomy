@@ -12,6 +12,8 @@ find_package(ament_index_cpp REQUIRED)
 find_package(gz-cmake3 REQUIRED)
 find_package(gz-plugin2 REQUIRED COMPONENTS register)
 find_package(gz-sim8 REQUIRED)
+find_package(gz-transport13 REQUIRED )
+find_package(gz-msgs10 REQUIRED)
 
 # ros2 launch file
 install(DIRECTORY launch meshes urdf worlds
@@ -24,7 +26,9 @@ foreach(plugin actuator hydro)
   target_compile_features(mubot_${plugin} PRIVATE cxx_std_17)
   target_link_libraries(mubot_${plugin} PRIVATE
     gz-sim8::gz-sim8 
-    gz-plugin2::gz-plugin2)
+    gz-plugin2::gz-plugin2
+    gz-transport13::gz-transport13
+    gz-msgs10::gz-msgs10)
   if(ament_index_cpp_FOUND)
     target_link_libraries(mubot_${plugin} PRIVATE ament_index_cpp::ament_index_cpp)
   endif()

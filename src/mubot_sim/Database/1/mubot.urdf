@@ -1,130 +1,312 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <robot name="mubot_1">
-  <link name="head">
-    <inertial>
-      <origin xyz="0.005 0 0" rpy="0 0 0"/>
-      <mass value="0.511799"/>
-      <inertia ixx="2.13665e-05" ixy="0.0" ixz="0.0" iyy="2.13665e-05" iyz="0.0" izz="4.06981e-05"/>
+
+<link name="segment_head_0">
+  <inertial>
+    <origin xyz="0.02857 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.967E+1" />
+    <inertia ixx="6.043E-03" ixy="0.0" ixz="0.0" iyy="6.043E-03" iyz="0.0" izz="6.043E-03" />
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_head.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="1 0 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_head.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_body_1">
+  <inertial>
+    <origin xyz="0.01170 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.975E+1" />
+    <inertia ixx="2.018E-03" ixy="0.0" ixz="0.0" iyy="2.018E-03" iyz="0.0" izz="2.018E-03" />
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_body_2">
+  <inertial>
+    <origin xyz="0.01170 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.975E+01" />
+      <inertia ixx="2.018E-03" ixy="0.0" ixz="0.0" iyy="2.018E-03" iyz="0.0" izz="2.018E-03" />
     </inertial>
-    <visual>
-      <origin xyz="0.005 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.01 0.0075 0.01"/>
-      </geometry>
-    </visual>
-  </link>
-  <link name="body_1">
-    <inertial>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <mass value="9.28319"/>
-      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_body_3">
+  <inertial>
+    <origin xyz="0.01170 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.975E+01" />
+      <inertia ixx="2.018E-03" ixy="0.0" ixz="0.0" iyy="2.018E-03" iyz="0.0" izz="2.018E-03" />
     </inertial>
-    <visual>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.02 0.0075 0.02"/>
-      </geometry>
-    </visual>
-  </link>
-  <link name="body_2">
-    <inertial>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <mass value="9.28319"/>
-      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_body_4">
+  <inertial>
+    <origin xyz="0.01170 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.975E+01" />
+      <inertia ixx="2.018E-03" ixy="0.0" ixz="0.0" iyy="2.018E-03" iyz="0.0" izz="2.018E-03" />
     </inertial>
-    <visual>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.02 0.0075 0.02"/>
-      </geometry>
-    </visual>
-  </link>
-  <link name="body_3">
-    <inertial>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <mass value="9.28319"/>
-      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_body_5">
+  <inertial>
+    <origin xyz="0.01170 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.975E+01" />
+      <inertia ixx="2.018E-03" ixy="0.0" ixz="0.0" iyy="2.018E-03" iyz="0.0" izz="2.018E-03" />
     </inertial>
-    <visual>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.02 0.0075 0.02"/>
-      </geometry>
-    </visual>
-  </link>
-  <link name="body_4">
-    <inertial>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <mass value="9.28319"/>
-      <inertia ixx="0.000657206" ixy="0.0" ixz="0.0" iyy="0.000657206" iyz="0.0" izz="0.00125182"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.01 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.02 0.0075 0.02"/>
-      </geometry>
-    </visual>
-  </link>
-  <link name="tailtra_3">
-    <inertial>
-      <origin xyz="0.016 0 0" rpy="0 0 0"/>
-      <mass value="15.6726"/>
-      <inertia ixx="0.00111721" ixy="0.0" ixz="0.0" iyy="0.00111721" iyz="0.0" izz="0.00212802"/>
-    </inertial>
-    <visual>
-      <origin xyz="0.016 0 0" rpy="0 0 0"/>
-      <geometry>
-        <box size="0.03 0.002 0.03"/>
-      </geometry>
-    </visual>
-  </link>
-  <joint name="joint_0" type="revolute">
-    <origin xyz="0.0101 0 0" rpy="0 0 0"/>
-    <parent link="head"/>
-    <child link="body_1"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-0.79" upper="0.79" effort="10" velocity="10"/>
-    <dynamics damping="0.007534" friction="0.0"/>
-  </joint>
-  <joint name="joint_1" type="revolute">
-    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
-    <parent link="body_1"/>
-    <child link="body_2"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
-    <dynamics damping="0.021229" friction="0.0"/>
-  </joint>
-  <joint name="joint_2" type="revolute">
-    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
-    <parent link="body_2"/>
-    <child link="body_3"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
-    <dynamics damping="0.021229" friction="0.0"/>
-  </joint>
-  <joint name="joint_3" type="revolute">
-    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
-    <parent link="body_3"/>
-    <child link="body_4"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
-    <dynamics damping="0.021229" friction="0.0"/>
-  </joint>
-  <joint name="joint_4" type="revolute">
-    <origin xyz="0.0201 0 0" rpy="0 0 0"/>
-    <parent link="body_4"/>
-    <child link="tailtra_3"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-0.35" upper="0.35" effort="10" velocity="10"/>
-    <dynamics damping="0.023822" friction="0.0"/>
-  </joint>
-  <gazebo>
-    <plugin filename="mubot_actuator" name="mubot::ActuatorPlugin">
-      <database_dir>/home/donghaoli/new_mubot/src/mubot_sim/Database</database_dir>
-      <explicit_spring>true</explicit_spring>
-    </plugin>
-    <plugin filename="mubot_hydro" name="mubot::HydroPlugin">
-      <database_dir>/home/donghaoli/new_mubot/src/mubot_sim/Database</database_dir>
-    </plugin>
-  </gazebo>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 1 0 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_body.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_pedunc">
+  <inertial>
+    <origin xyz="0.007515 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.418E+01" />
+    <inertia ixx="1.109E-03" ixy="0.0" ixz="0.0" iyy="1.109E-03" iyz="0.0" izz="1.109E-03" />
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_pedu.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 0 1 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_pedu.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="segment_tailtp">
+  <inertial>
+    <origin xyz="0.01400 0.0 0.0" rpy="0 0 0" />
+    <mass value="1.003E+01" />
+    <inertia ixx="1.730E-03" ixy="0.0" ixz="0.0" iyy="1.730E-03" iyz="0.0" izz="1.730E-03" />
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_ttip.STL" scale="1 1 1"/>
+    </geometry>
+    <material name="">
+      <color rgba="0 0 1 1" />
+    </material>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <geometry>
+      <mesh filename="package://mubot_sim/meshes/segment_ttip.STL" scale="1 1 1"/>
+    </geometry>
+  </collision>
+</link>
+
+
+<!--Defination of joints: joint0-joint5-->
+<joint name="joint_a0" type="revolute">
+  <origin xyz="0.041 0 0" rpy="0 0 0" />
+  <parent link="segment_head_0" />
+  <child link="segment_body_1" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+<joint name="joint_a1" type="revolute">
+  <origin xyz="0.02675 0 0" rpy="0 0 0" />
+  <parent link="segment_body_1" />
+  <child link="segment_body_2" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+<joint name="joint_a2" type="revolute">
+  <origin xyz="0.02675 0 0" rpy="0 0 0" />
+  <parent link="segment_body_2" />
+  <child link="segment_body_3" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+<joint name="joint_a3" type="revolute">
+  <origin xyz="0.02675 0 0" rpy="0 0 0" />
+  <parent link="segment_body_3" />
+  <child link="segment_body_4" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+<joint name="joint_a4" type="revolute">
+  <origin xyz="0.02675 0 0" rpy="0 0 0" />
+  <parent link="segment_body_4" />
+  <child link="segment_body_5" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+<joint name="joint_a5" type="revolute">
+  <origin xyz="0.02675 0 0" rpy="0 0 0" />
+  <parent link="segment_body_5" />
+  <child link="segment_pedunc" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+<joint name="joint_p0" type="revolute">
+  <origin xyz="0.02175 0 0" rpy="0 0 0" />
+  <parent link="segment_pedunc" />
+  <child link="segment_tailtp" />
+  <axis xyz="0 0 1" />
+  <limit lower="-1.57" upper="1.57" effort="10" velocity="10" />
+  <dynamics damping="0.05" friction="0.0"/>
+</joint>
+
+
+<gazebo reference="segment_body_1">
+    <material>Gazebo/Red</material>
+</gazebo>
+<gazebo reference="segment_body_2">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+<gazebo reference="segment_body_3">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+<gazebo reference="segment_body_4">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+<gazebo reference="segment_body_5">
+    <material>Gazebo/Yellow</material>
+</gazebo>
+<gazebo reference="segment_pedunc">
+    <material>Gazebo/Orange</material>
+</gazebo>
+<gazebo reference="segment_tailtp">
+    <material>Gazebo/Blue</material>
+</gazebo>
+
+<gazebo reference="joint_a0">
+  <springStiffness>5.328</springStiffness>
+</gazebo>
+<gazebo reference="joint_a1">
+  <springStiffness>5.328</springStiffness>
+</gazebo>
+<gazebo reference="joint_a2">
+  <springStiffness>5.328</springStiffness>
+</gazebo>
+<gazebo reference="joint_a3">
+  <springStiffness>5.328</springStiffness>
+</gazebo>
+<gazebo reference="joint_a4">
+  <springStiffness>5.328</springStiffness>
+</gazebo>
+<gazebo reference="joint_a5">
+  <springStiffness>5.328</springStiffness>
+</gazebo>
+<gazebo reference="joint_p0">
+  <springStiffness>16.86</springStiffness>
+</gazebo>
+
+<!--Defination of plugins-->
+<gazebo>
+  <plugin filename="mubot_actuator" name="mubot::ActuatorPlugin">
+    <database_dir>/home/donghaoli/new_mubot/src/mubot_sim/Database</database_dir>
+    <explicit_spring>false</explicit_spring>
+    <external_control>true</external_control>
+  </plugin>
+  <plugin filename="mubot_hydro" name="mubot::HydroPlugin">
+    <database_dir>/home/donghaoli/new_mubot/src/mubot_sim/Database</database_dir>
+    <csv_record>false</csv_record>
+  </plugin>
+</gazebo>
+
+
 </robot>

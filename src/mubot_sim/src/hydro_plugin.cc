@@ -1,13 +1,50 @@
-/* Hydrodynamics Force Plugin for MUBot Project
- * Gazebo Harmonic (gz-sim8) system plugin, with rollout drift metrics.
-
- * To increase accuracy, the density of fluid and robot are amplified 1000 times, 
- * so applying 'scaling'for torque output
+/* Hydrodynamics plugin for the MUBot swimming robot
+ * (Gazebo Harmonic / gz-sim8 System plugin: Configure, Reset, PreUpdate).
+ *
+ * Every step it computes the fluid force and torque on each link and applies them with
+ * AddWorldWrench at the link's centre of pressure offset (-cog, 0, 0):
+ *      - reactive (added-mass) force and torque
+ *      - added-mass compensation (Comp_ratio * mass * acceleration)
+ *      - resistive force: skin friction along x, and quadratic drag across the link,
+ *        integrated along the segment
+ *      - pressure force on the tail tip (last link only)
+ * The resulting wrench is clamped by maximum acceleration limits (Wrench_Clamp) so a
+ * bad state cannot blow the simulation up.
+ *
+ * The density of the fluid and of the robot is amplified 1000x for numerical accuracy
+ * (scale_factor, rho_f).
+ *
+ * Parameters (Database/<id>/):
+ *      hydro_param.csv     one row per link, in link order, 13 columns:
+ *                          name, M_total, M_S, M_0, M_l, cog, lt, h, IH0, IH1, IH2, IH3, IP
+ *                          (the number of rows must equal the number of model links)
+ *      control_signal.csv  only the last value (the control frequency) is read here; it sets
+ *                          the clamp limits and the evaluation window
+ *
+ * Plugin block options (all optional)
+ *      <database_dir>   folder that holds Database/<id>/
+ *      <csv_record>     write the record files below (default false)
+ *
+ * Recording (only when <csv_record>true</csv_record>), from record_time_ = 4.0 s on
+ *      record/displace_record.csv   link poses and tail position
+ *      record/force_record.csv      force components per link
+ *      record/drift_metrics.csv     CoGVel_x, abs_lateral, rms_lat, heading_drift over the
+ *                                   evaluation window [4.0 s, 4.0 s + n_cycles / frequency],
+ *                                   n_cycles = floor((terminate_time_ - 4.0) * frequency)
+ *      terminate.txt                created when the window ends
+ *      The drift metrics are mass-weighted over the link origins: CoG velocity along x (mean),
+ *      lateral drift of the CoG relative to its first sample and to the initial tail->head
+ *      direction (max |lat| and rms), and the change of the mass-weighted, unwrapped yaw.
+ *      The same metrics can be computed in Python from the step-service observations
+ *      (mubot_rob_env.drift_metrics_from_obs); this file is kept for parity checks.
+ *
+ * Reset: closes the record files, recomputes the evaluation window from control_signal.csv,
+ * resets the drift metrics, removes terminate.txt and writes reset_ack.txt last (Python waits
+ * for it). The link accelerations kept by the ECM are stale after a reset, so for the first
+ * step they are replaced by zero (after_reset_).
  *
  * Created by Donghao Li
- * Ported to gz-sim (ISystemConfigure + ISystemPreUpdate).
- * 
- * Hydrodynamic plugin is paused for first step to let simulator reset link acc
+ * Ported to gz-sim (ISystemConfigure + ISystemPreUpdate + ISystemReset).
  */
 
 #include "mubot_sim/mubot_common.hh"
@@ -103,6 +140,10 @@ public:
             if (!model_.Valid(_ecm)) {
                 throw std::runtime_error("[Hydro] Configure(): entity is not a valid model.");
             }
+            if (_sdf)
+            {
+                csv_record_  = _sdf->Get<bool>("csv_record", false).first;
+            }
 
             path_ = Resolve_Database_Path(_sdf, model_.Name(_ecm));
 
@@ -130,20 +171,6 @@ public:
         const double simu_time = std::chrono::duration<double>(_info.simTime).count();
         const int64_t simu_step   = Safe_Round_Step(simu_time, step_size_);
         const int64_t record_step = Safe_Round_Step(record_time_, step_size_);
-
-        //-------------------------------------
-        // Debugging
-        //-------------------------------------
-        // if (simu_step <=3){
-        //     gzerr<<"after reset: "<<after_reset_<<std::endl;
-        // }
-
-        // if (simu_step % 2000 == 0) {
-        //     gzerr << " Time: " << simu_time << std::endl;
-        // }
-        // if (simu_step == 20) {
-        //     gzerr << "Hydro Start" << std::endl;
-        // }
 
         const size_t N = links_.size();
         if (N == 0 || params_.size() != N) return;
@@ -174,9 +201,7 @@ public:
             if (!(P.M_total > 1e-9)) continue;
 
             const Vector3d WLV = *wlv;
-            // const Vector3d WLA = *wla;
             const Vector3d WAV = *wav;
-            // const Vector3d WAA = *waa;
 
             const Vector3d WLA = after_reset_ ? Vector3d::Zero : *wla;
             const Vector3d WAA = after_reset_ ? Vector3d::Zero : *waa;
@@ -267,58 +292,40 @@ public:
             const Vector3d f_world = WP_[i].Rot().RotateVector(Vector3d(fx, fy, 0.0));
             link.AddWorldWrench(_ecm, f_world, Vector3d(0.0, 0.0, tz),Vector3d(-P.cog,0,0));
         }
-
-        // if (simu_step == 10) {                 // first step after reset = the state the rollout starts from
-        //     std::ofstream out(path_ + "/init_state.csv", std::ios::out);
-        //     if (out.is_open()) {
-        //         out << std::scientific << std::setprecision(6);
-        //         out << "link,x,y,yaw,vx,vy,wz,ax,ay,alpha_z\n";
-        //         for (size_t i = 0; i < N; ++i) {
-        //             const auto wlv = links_[i].WorldLinearVelocity(_ecm);
-        //             const auto wla = links_[i].WorldLinearAcceleration(_ecm);
-        //             const auto wav = links_[i].WorldAngularVelocity(_ecm);
-        //             const auto waa = links_[i].WorldAngularAcceleration(_ecm);
-        //             if (!wlv || !wla || !wav || !waa) continue;
-        //             out << i << ","
-        //                 << WP_[i].Pos().X() << "," << WP_[i].Pos().Y() << "," << WP_[i].Rot().Yaw() << ","
-        //                 << wlv->X() << "," << wlv->Y() << "," << wav->Z() << ","
-        //                 << wla->X() << "," << wla->Y() << "," << waa->Z() << "\n";
-        //         }
-        //     }
-        // }
-
         after_reset_ = false;
         // MUBot state recording
-        if ((simu_step >= record_step) && (simu_time <= eval_end_time_ + 0.5)) {
-            Record_File_Create();
+        if csv_record_{
+            if ((simu_step >= record_step) && (simu_time <= eval_end_time_ + 0.5)) {
+                Record_File_Create();
 
-            disp_out_ << simu_time << ",";
-            for (size_t i = 0; i < N; ++i) {
-                disp_out_ << WP_[i].Pos().X() << "," << WP_[i].Pos().Y() << "," << WP_[i].Rot().Yaw() << ",";
+                disp_out_ << simu_time << ",";
+                for (size_t i = 0; i < N; ++i) {
+                    disp_out_ << WP_[i].Pos().X() << "," << WP_[i].Pos().Y() << "," << WP_[i].Rot().Yaw() << ",";
+                }
+                const double y_tail = WP_[N - 1].Pos().Y() + params_[N - 1].lt * std::sin(WP_[N - 1].Rot().Yaw());
+                const double x_tail = WP_[N - 1].Pos().X() + params_[N - 1].lt * std::cos(WP_[N - 1].Rot().Yaw());
+                disp_out_ << x_tail << ',' << y_tail << "\n";
+
+                force_out_ << simu_time << ",";
+                for (size_t i = 0; i < N; ++i) {
+                    force_out_ << react_x_[i] << "," << resis_x_[i] << "," << compe_x_[i] << ",";
+                    force_out_ << react_y_[i] << "," << resis_y_[i] << "," << compe_y_[i] << ",";
+                    force_out_ << react_t_[i] << "," << resis_t_[i] << "," << compe_t_[i] << ",";
+                }
+                force_out_ << tail_pressure << "\n";
+
+                Update_Drift_Metrics(_ecm, simu_time);
             }
-            const double y_tail = WP_[N - 1].Pos().Y() + params_[N - 1].lt * std::sin(WP_[N - 1].Rot().Yaw());
-            const double x_tail = WP_[N - 1].Pos().X() + params_[N - 1].lt * std::cos(WP_[N - 1].Rot().Yaw());
-            disp_out_ << x_tail << ',' << y_tail << "\n";
 
-            force_out_ << simu_time << ",";
-            for (size_t i = 0; i < N; ++i) {
-                force_out_ << react_x_[i] << "," << resis_x_[i] << "," << compe_x_[i] << ",";
-                force_out_ << react_y_[i] << "," << resis_y_[i] << "," << compe_y_[i] << ",";
-                force_out_ << react_t_[i] << "," << resis_t_[i] << "," << compe_t_[i] << ",";
-            }
-            force_out_ << tail_pressure << "\n";
-
-            Update_Drift_Metrics(_ecm, simu_time);
-        }
-
-        if (simu_time >= eval_end_time_) {
-            Write_Drift_Summary_If_Needed(simu_time);
-            const std::string term = path_ + "/terminate.txt";
-            if (!File_Exists(term)) {
-                std::ofstream(term, std::ios::out).close();
-                if (disp_out_.is_open())  disp_out_.flush();
-                if (force_out_.is_open()) force_out_.flush();
-                gzmsg << "Hydro Terminate Created" << std::endl;
+            if (simu_time >= eval_end_time_) {
+                Write_Drift_Summary_If_Needed(simu_time);
+                const std::string term = path_ + "/terminate.txt";
+                if (!File_Exists(term)) {
+                    std::ofstream(term, std::ios::out).close();
+                    if (disp_out_.is_open())  disp_out_.flush();
+                    if (force_out_.is_open()) force_out_.flush();
+                    gzmsg << "Hydro Terminate Created" << std::endl;
+                }
             }
         }
     }
@@ -332,8 +339,6 @@ public:
                 if (f->is_open()) f->close();
             record_files_initialized_ = false;
             after_reset_ = true;
-
-            std::remove((path_ + "/terminate.txt").c_str());
 
             Load_Control_Frequency(_ecm, path_ + "/control_signal.csv");
             Prepare_Eval_Window();
@@ -365,8 +370,6 @@ public:
         double IH2     = 0.0;
         double IH3     = 0.0;
         double IP      = 0.0;
-        // double cf      = 0.0;
-        // double cd      = 0.0;
     };
 
     struct DriftMetrics {
@@ -449,8 +452,6 @@ public:
             p.IH2     = Parse_Double(c[10], line_no, 10, "[Hydro]");
             p.IH3     = Parse_Double(c[11], line_no, 11, "[Hydro]");
             p.IP      = Parse_Double(c[12], line_no, 12, "[Hydro]");
-            // p.cf      = Parse_Double(c[13], line_no, 13, "[Hydro]");
-            // p.cd      = Parse_Double(c[14], line_no, 14, "[Hydro]");
 
             double m = 0.0, izz = 0.0;
             if (!Get_Link_Mass_Izz(ecm, e, m, izz) || !std::isfinite(m) || !std::isfinite(izz)) {
@@ -677,8 +678,10 @@ private:
     double eval_period_ = 0.0;
     double eval_end_time_ = 0.0;
 
+
     std::string path_;
     bool record_files_initialized_ = false;
+    bool csv_record_ = false;
 
     std::vector<gz::sim::Link> links_;
     std::vector<std::string> link_names_;

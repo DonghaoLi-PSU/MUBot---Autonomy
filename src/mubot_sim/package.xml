@@ -18,6 +18,8 @@
   <depend>gz_plugin_vendor</depend>
   <depend>gz_sim_vendor</depend>
   <depend>ament_index_cpp</depend>
+  <depend>gz-transport13</depend>
+  <depend>gz-msgs10</depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>

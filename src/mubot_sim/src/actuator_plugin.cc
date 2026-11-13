@@ -1,33 +1,93 @@
-/* Plugin for MUBot Magnetic-electric Actuator & Spring  (Gazebo Harmonic / gz-sim8)
- * 
- * Joints 0..s_num-3 contain an active actuator and a passive spring
- * Joint  s_num-2    contains a passive spring only
+/* Actuator plugin for the MUBot magnetic-electric actuators and joint springs
+ * (Gazebo Harmonic / gz-sim8 System plugin: Configure, Reset, PreUpdate).
  *
- * To increase accuracy, the density of fluid and robot are amplified 1k times, 
- * so applying 'scaling'for torque output
- * 
+ * Every joint has an actuator. Each joint also has a passive spring, either applied here
+ * (<explicit_spring>true</explicit_spring>) or defined in the model file
+ * (<axis><dynamics><spring_stiffness>), in which case it must be false here.
+ *
+ * The density of the fluid and of the robot is amplified 1000x for numerical accuracy,
+ * so the torques are multiplied by 'scaling'. The actuator torque is
+ *      tau = (V - ac * w) / 90 * ac * scaling
+ * and, together with the optional explicit spring torque -sf * q * scaling, is clamped by a
+ * maximum angular acceleration (AccelClampTorque) before it is applied with SetForce.
+ *
+ * Parameters: Database/<id>/joint_param.csv, one row per joint:
+ *      joint_name, sf_param (spring), ac_param (actuator), stiff_ratio
+ *
+ * Plugin block options (all optional)
+ *      <database_dir>       folder that holds Database/<id>/
+ *      <explicit_spring>    apply the joint spring here (default false)
+ *      <external_control>   drive the voltages from Python (default false)
+ *      <idle_timeout_s>     external mode: the sim stops waiting for a request after this long (30)
+ *      <reply_timeout_s>    external mode: the service gives up waiting for the sim after this long (10)
+ *
+ * Two control modes
+ * -----------------
+ * 1) Open loop (default)
+ *      V_i = amp_i * sin(2*pi*(f*t + phase_i)), parameters from Database/<id>/control_signal.csv
+ *      (packing: amp_0, then (amp_i, phase_i) for i = 1..N-1, then the frequency).
+ *
+ * 2) External lock-step control (<external_control>true</external_control>)
+ *      A gz-transport service  /model/<model_name>/step  (gz.msgs.Double_V -> gz.msgs.Double_V)
+ *      drives the simulation. The sim thread blocks inside PreUpdate whenever it has no steps
+ *      left, so the world cannot advance beyond the steps that were requested.
+ *
+ *      Request  [ n_steps, v... ]
+ *                 len(v) == N          the voltage vector is held for all n_steps
+ *                 len(v) == N*n_steps  step-major sequence, v[k*N + i] = joint i at step k
+ *                 n_steps == 0         advance nothing, only return the current observation
+ *                 n_steps == -1        RELEASE: stop waiting for requests (voltage 0). Call it before
+ *                                      pausing or resetting the world, because a waiting sim thread
+ *                                      cannot process world-control messages. A world reset re-arms it.
+ *      Reply    [ status, sim_time, iteration,
+ *                 joint_pos[N], joint_vel[N],
+ *                 head_x, head_y, head_yaw, head_vx, head_vy, head_wz,
+ *                 cog_x, cog_y, cogvel_x, cogvel_y, cog_yaw,     (mass-weighted over the links)
+ *                 tail_x, tail_y ]                                (origin of the last link)
+ *                 length = 3 + 2N + 13
+ *                 status: 0 ok, 1 invalid request, 2 busy, 3 aborted by a world reset,
+ *                         4 simulation is paused (unpause first; the service answers at once)
+ *                 The observation is the state after the last requested step, and `iteration`
+ *                 advances by exactly n_steps between two consecutive replies.
+ *      The service call fails (no reply) if the sim does not answer within <reply_timeout_s>.
+ *
+ * Reset: closes the debug files, re-arms the step gate (external mode) or re-reads
+ * control_signal.csv (open loop), and sets the joint positions and velocities to zero.
+ * Debug files (record/actuator_output.csv, record/voltage_output.csv) are written from t = 4.0 s.
+ *
  * Original (Gazebo Classic) by Donghao Li, March 23rd 2021.
- * Ported to a gz-sim System plugin (ISystemConfigure + ISystemPreUpdate).
+ * Ported to a gz-sim System plugin.
  */
 
 #include "mubot_sim/mubot_common.hh"
 
 #include <gz/common/Console.hh>
+#include <gz/math/Pose3.hh>
+#include <gz/math/Vector3.hh>
+#include <gz/msgs/double_v.pb.h>
 #include <gz/plugin/Register.hh>
 #include <gz/sim/EntityComponentManager.hh>
 #include <gz/sim/Joint.hh>
+#include <gz/sim/Link.hh>
 #include <gz/sim/Model.hh>
 #include <gz/sim/System.hh>
 #include <gz/sim/Types.hh>
+#include <gz/transport/Node.hh>
+#include <gz/sim/components/Inertial.hh>
 
 #include <sdf/Element.hh>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -63,6 +123,11 @@ public:
     ActuatorPlugin() = default;
 
     ~ActuatorPlugin() override {
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            stop_ = true;
+        }
+        cv_.notify_all();
         if (act_out_.is_open())  act_out_.close();
         if (volt_out_.is_open()) volt_out_.close();
     }
@@ -78,9 +143,15 @@ public:
                 throw std::runtime_error("[Actuator] Configure(): entity is not a valid model.");
             }
 
-            // Joint stiffness contained in sdf, no plugin anymore.             
+            // Joint stiffness contained in sdf, no plugin anymore.
             if (_sdf) {
-                explicit_spring_ = _sdf->Get<bool>("explicit_spring", false).first;
+                explicit_spring_  = _sdf->Get<bool>("explicit_spring", false).first;
+                external_control_ = _sdf->Get<bool>("external_control", false).first;
+                gzerr<<"Plugin Spring: "<< explicit_spring_<<" External control: "<< external_control_<<std::endl;
+                idle_timeout_  = std::chrono::milliseconds(static_cast<int64_t>(
+                    1000.0 * _sdf->Get<double>("idle_timeout_s", 30.0).first));
+                reply_timeout_ = std::chrono::milliseconds(static_cast<int64_t>(
+                    1000.0 * _sdf->Get<double>("reply_timeout_s", 10.0).first));
             }
 
             path_ = Resolve_Database_Path(_sdf, model_.Name(_ecm));
@@ -88,8 +159,12 @@ public:
             // Load joint_param.csv and enforce name match
             Load_Joint_Params(_ecm, path_ + "/joint_param.csv");
 
-            // Load control_signal.csv (one line)
-            Load_Control_Signal(path_ + "/control_signal.csv");
+            if (external_control_) {
+                Setup_External_Control(_ecm);
+            } else {
+                // Load control_signal.csv (one line)
+                Load_Control_Signal(path_ + "/control_signal.csv");
+            }
 
             configured_ = true;
             gzerr << "[Actuator] CSV and URDF matched" << std::endl; // One time check
@@ -100,10 +175,55 @@ public:
         }
     }
 
+    void Reset(const gz::sim::UpdateInfo& /*_info*/,
+               gz::sim::EntityComponentManager& _ecm) override
+    {
+        try {
+            if (act_out_.is_open())  act_out_.close();
+            if (volt_out_.is_open()) volt_out_.close();
+            output_files_initialized_ = false;
+
+            if (external_control_) {
+                std::lock_guard<std::mutex> lk(mtx_);
+                steps_left_ = 0;
+                ext_idx_ = 0;
+                has_request_ = false;
+                release_ = false;
+                gave_up_ = false;                // re-arm the gate
+                std::fill(ext_now_.begin(), ext_now_.end(), 0.0);
+                if (waiting_reply_) {            // a request was in flight: tell the client
+                    reply_.Clear();
+                    reply_.add_data(3.0);
+                    waiting_reply_ = false;
+                    reply_ready_ = true;
+                    cv_.notify_all();
+                }
+            } else {
+                Load_Control_Signal(path_ + "/control_signal.csv");
+            }
+
+            for (auto& j : joints_) {
+                j.ResetPosition(_ecm, {0.0});
+                j.ResetVelocity(_ecm, {0.0});
+            }
+            configured_ = true;
+        }
+        catch (const std::exception& e) {
+            gzerr << e.what() << " -- Actuator plugin disabled." << std::endl;
+            configured_ = false;
+        }
+    }
+
     void PreUpdate(const gz::sim::UpdateInfo& _info,
                    gz::sim::EntityComponentManager& _ecm) override
     {
+        paused_.store(_info.paused);
         if (!configured_ || _info.paused) return;
+
+        const size_t N = joints_.size();
+        if (N == 0) return;
+
+        if (external_control_) Gate_Step(_ecm, _info);
 
         const double dt = std::chrono::duration<double>(_info.dt).count();
         if (dt > 0.0 && std::isfinite(dt)) step_size_ = dt;
@@ -112,16 +232,12 @@ public:
         const int64_t simu_step   = Safe_Round_Step(simu_time, step_size_);
         const int64_t record_step = Safe_Round_Step(record_time_, step_size_);
 
-        const size_t N = joints_.size();
-        if (N == 0) return;
-
         std::fill(pos_.begin(), pos_.end(), 0.0);
         std::fill(vel_.begin(), vel_.end(), 0.0);
         std::fill(voltage_.begin(), voltage_.end(), 0.0);
         std::fill(torque_rec_.begin(), torque_rec_.end(), 0.0);
         std::fill(torque_act_.begin(), torque_act_.end(), 0.0);
         std::fill(torque_spring_.begin(), torque_spring_.end(), 0.0);
-
         // compute and apply actuator torques
         for (size_t i = 0; i < N; ++i) {
             auto& j = joints_[i];
@@ -130,13 +246,15 @@ public:
             pos_[i] = (p && !p->empty()) ? (*p)[0] : 0.0;
             vel_[i] = (v && !v->empty()) ? (*v)[0] : 0.0;
 
-            const double volt = amp_[i] * std::sin(2.0 * Pi * (frequency_ * simu_time + phase_[i]));
-            voltage_[i] = Clamp(volt, 15.0);   // clamp voltage
+            const double volt = external_control_
+                ? ext_now_[i]
+                : amp_[i] * std::sin(2.0 * Pi * (frequency_ * simu_time + phase_[i]));
+            voltage_[i] = Clamp(Sanitize(volt), 15.0);   // clamp voltage
 
             const double ac = joint_params_[i].ac_param;
 
             torque_act_[i] = ((voltage_[i] - ac * vel_[i]) / 90.0) * ac * scaling;
-            torque_spring_[i] = explicit_spring_ ? (-joint_params_[i].sf_param * pos_[i]) : 0.0; //either in sdf or plugin
+            torque_spring_[i] = explicit_spring_ ? (-joint_params_[i].sf_param * pos_[i]) * scaling : 0.0; //either in sdf or plugin
 
             const double torque_raw = torque_act_[i] + torque_spring_[i];
             double torque_clamped = 0.0;
@@ -162,29 +280,6 @@ public:
             volt_out_ << "\n";
         }
     }
-    
-    void Reset(const gz::sim::UpdateInfo& /*_info*/,
-           gz::sim::EntityComponentManager& _ecm) override
-    {
-        try {
-            if (act_out_.is_open())  act_out_.close();
-            if (volt_out_.is_open()) volt_out_.close();
-            output_files_initialized_ = false;
-
-            Load_Control_Signal(path_ + "/control_signal.csv");
-
-            // Belt and braces in case the world reset does not restore joint state.
-            for (auto& j : joints_) {
-                j.ResetPosition(_ecm, {0.0});
-                j.ResetVelocity(_ecm, {0.0});
-            }
-            configured_ = true;
-        }
-        catch (const std::exception& e) {
-            gzerr << e.what() << " -- Actuator plugin disabled." << std::endl;
-            configured_ = false;
-        }
-    }
 
 private:
     // joint_param.csv row: name, sf_param, ac_param, stiff_ratio
@@ -194,6 +289,214 @@ private:
         double stiff_ratio = 0.0;
     };
 
+    // ------------------------------------------------------------------
+    // external step control
+    // ------------------------------------------------------------------
+    void Setup_External_Control(gz::sim::EntityComponentManager& ecm) {
+        const size_t N = joints_.size();
+        ext_now_.assign(N, 0.0);
+
+        // "head" for the observation 
+        const auto parent = joints_[0].ParentLinkName(ecm);
+        if (parent) {
+            const gz::sim::Entity he = model_.LinkByName(ecm, *parent);
+            if (he != gz::sim::kNullEntity) {
+                head_ = gz::sim::Link(he);
+                head_.EnableVelocityChecks(ecm, true);
+                have_head_ = true;
+            }
+        }
+
+        auto add_link = [&](const std::string& lname) {
+            const gz::sim::Entity e = model_.LinkByName(ecm, lname);
+            if (e == gz::sim::kNullEntity) return;
+            gz::sim::Link l(e);
+            l.EnableVelocityChecks(ecm, true);
+            const auto* in = ecm.Component<gz::sim::components::Inertial>(e);
+            chain_.push_back(l);
+            chain_mass_.push_back(in ? in->Data().MassMatrix().Mass() : 0.0);
+        };
+        chain_.clear(); chain_mass_.clear();
+        if (parent) add_link(*parent);
+        for (size_t i = 0; i < N; ++i) {
+            const auto c = joints_[i].ChildLinkName(ecm);
+            if (c) add_link(*c);
+        }
+        for (size_t i = 0; i < chain_mass_.size(); ++i)
+        {
+            gzmsg << "[Actuator] chain link " << i << " mass " << chain_mass_[i] << std::endl;
+        }
+
+        const std::string topic = "/model/" + model_.Name(ecm) + "/step";
+        if (!node_.Advertise(topic, &ActuatorPlugin::On_Step, this)) {
+            throw std::runtime_error("[Actuator] cannot advertise service " + topic);
+        }
+        gzmsg << "[Actuator] external control, service: " << topic << std::endl;
+    }
+
+    // Runs on a gz-transport thread. One request at a time; blocks until the sim thread
+    // has run the requested steps and produced the observation.
+    bool On_Step(const gz::msgs::Double_V& req, gz::msgs::Double_V& rep)
+    {
+        const size_t N = joints_.size();
+        rep.Clear();
+
+        std::unique_lock<std::mutex> svc(svc_mtx_, std::try_to_lock);
+        if (!svc.owns_lock()) { rep.add_data(2.0); return true; }            // busy
+
+        if (req.data_size() < 1) { rep.add_data(1.0); return true; }
+        const double n_raw = req.data(0);
+
+        // n_steps == -1: RELEASE. The sim thread blocks inside PreUpdate while it waits for the
+        // next request, and in that state it cannot process world-control messages (pause, reset,
+        // stop). Release makes it stop waiting, so pause/reset/shutdown work. A world reset
+        // re-arms the gate.
+        if (n_raw == -1.0) {
+            std::lock_guard<std::mutex> lk(mtx_);
+            release_ = true;
+            cv_.notify_all();
+            rep.add_data(0.0);
+            return true;
+        }
+
+        if (!std::isfinite(n_raw) || n_raw < 0.0 || n_raw > 1.0e6) { rep.add_data(1.0); return true; }
+        const int64_t n = static_cast<int64_t>(std::llround(n_raw));
+        const size_t len = static_cast<size_t>(req.data_size() - 1);
+        const bool observe_only = (n == 0);        // voltages, if any, are ignored
+        const bool hold = (len == N);
+        const bool seq  = (n > 0 && len == N * static_cast<size_t>(n));
+        if (!observe_only && !hold && !seq) { rep.add_data(1.0); return true; }
+
+        if (paused_.load()) { rep.add_data(4.0); return true; }
+
+        std::vector<double> volts;
+        if (!observe_only) {
+            volts.resize(len);
+            for (size_t k = 0; k < len; ++k) volts[k] = Sanitize(req.data(static_cast<int>(k + 1)));
+        }
+
+        std::unique_lock<std::mutex> lk(mtx_);
+        pending_seq_ = std::move(volts);
+        pending_n_ = n;
+        has_request_ = true;
+        reply_ready_ = false;
+        cv_.notify_all();
+
+        if (!cv_.wait_for(lk, reply_timeout_, [this] { return reply_ready_ || stop_; }) || !reply_ready_) {
+            has_request_ = false;
+            return false;
+        }
+        rep = reply_;
+        reply_ready_ = false;
+        return true;
+    }
+
+    // Sim thread. On return, ext_now_ holds the voltage for this step (or zeros if the
+    // controller went away).
+    void Gate_Step(const gz::sim::EntityComponentManager& ecm,
+                   const gz::sim::UpdateInfo& info)
+    {
+        const size_t N = joints_.size();
+        if (gave_up_) {
+            std::fill(ext_now_.begin(), ext_now_.end(), 0.0);
+            return;
+        }
+
+        while (steps_left_ == 0) {
+            std::unique_lock<std::mutex> lk(mtx_);
+
+            // The previous request is finished (or this is the very first step):
+            // the ECM now holds the state after its last step -> answer it.
+            if (waiting_reply_) {
+                Build_Observation(ecm, info, reply_);
+                waiting_reply_ = false;
+                reply_ready_ = true;
+                cv_.notify_all();
+            }
+
+            const bool got = cv_.wait_for(lk, idle_timeout_,
+                                          [this] { return has_request_ || stop_ || release_; });
+            if (got && release_ && !has_request_ && !stop_) {
+                // Released by the client: stop gating (voltage 0) until the next world reset,
+                // so the sim thread is free to handle pause / reset / shutdown messages.
+                release_ = false;
+                gave_up_ = true;
+                std::fill(ext_now_.begin(), ext_now_.end(), 0.0);
+                return;
+            }
+            if (!got || stop_) {
+                gave_up_ = true;
+                gzerr << "[Actuator] no step request for "
+                      << std::chrono::duration<double>(idle_timeout_).count()
+                      << " s -- external control abandoned, voltage = 0." << std::endl;
+                std::fill(ext_now_.begin(), ext_now_.end(), 0.0);
+                return;
+            }
+
+            ext_seq_      = std::move(pending_seq_);
+            steps_left_   = pending_n_;
+            ext_idx_      = 0;
+            has_request_  = false;
+            waiting_reply_ = true;
+        }
+
+        const bool hold = (ext_seq_.size() == N);
+        for (size_t i = 0; i < N; ++i) {
+            ext_now_[i] = hold ? ext_seq_[i] : ext_seq_[static_cast<size_t>(ext_idx_) * N + i];
+        }
+        ++ext_idx_;
+        --steps_left_;
+    }
+
+    void Build_Observation(const gz::sim::EntityComponentManager& ecm,
+                           const gz::sim::UpdateInfo& info,
+                           gz::msgs::Double_V& out) const
+    {
+        out.Clear();
+        out.add_data(0.0);                                                   // status
+        out.add_data(std::chrono::duration<double>(info.simTime).count());   // sim_time
+        out.add_data(static_cast<double>(info.iterations));                  // iteration
+
+        const size_t N = joints_.size();
+        for (size_t i = 0; i < N; ++i) {
+            const auto p = joints_[i].Position(ecm);
+            out.add_data((p && !p->empty()) ? (*p)[0] : 0.0);
+        }
+        for (size_t i = 0; i < N; ++i) {
+            const auto v = joints_[i].Velocity(ecm);
+            out.add_data((v && !v->empty()) ? (*v)[0] : 0.0);
+        }
+
+        double hx = 0, hy = 0, hyaw = 0, hvx = 0, hvy = 0, hwz = 0;
+        if (have_head_) {
+            const auto pose = head_.WorldPose(ecm);
+            const auto lv   = head_.WorldLinearVelocity(ecm);
+            const auto av   = head_.WorldAngularVelocity(ecm);
+            if (pose) { hx = pose->Pos().X(); hy = pose->Pos().Y(); hyaw = pose->Rot().Yaw(); }
+            if (lv)   { hvx = lv->X(); hvy = lv->Y(); }
+            if (av)   { hwz = av->Z(); }
+        }
+        for (double d : {hx, hy, hyaw, hvx, hvy, hwz}) out.add_data(d);
+
+        double cx = 0, cy = 0, cvx = 0, cvy = 0, cyaw = 0, tx = 0, ty = 0, mt = 0;
+        for (size_t i = 0; i < chain_.size(); ++i) {
+            const auto pose = chain_[i].WorldPose(ecm);
+            const auto lv   = chain_[i].WorldLinearVelocity(ecm);
+            const double m  = chain_mass_[i];
+            if (!pose) continue;
+            cx += pose->Pos().X() * m;  cy += pose->Pos().Y() * m;
+            cyaw += pose->Rot().Yaw() * m;
+            if (lv) { cvx += lv->X() * m; cvy += lv->Y() * m; }
+            mt += m;
+        }
+        if (mt > 1e-12) { cx /= mt; cy /= mt; cvx /= mt; cvy /= mt; cyaw /= mt; }
+        if (!chain_.empty()) {
+            if (const auto tp = chain_.back().WorldPose(ecm)) { tx = tp->Pos().X(); ty = tp->Pos().Y(); }
+        }
+        for (double d : {cx, cy, cvx, cvy, cyaw, tx, ty}) out.add_data(d);   // 7 new values
+    }
+
+    // ------------------------------------------------------------------
     //  set joints_ (Joints are looked up by name).
     void Load_Joint_Params(gz::sim::EntityComponentManager& ecm, const std::string& csv_path) {
         const auto model_joints = model_.Joints(ecm);
@@ -280,7 +583,7 @@ private:
         torque_act_.assign(N, 0.0); torque_spring_.assign(N, 0.0); torque_rec_.assign(N, 0.0);
     }
 
-    // Getting amp_, phase_ and frequency_ 
+    // Getting amp_, phase_ and frequency_
     void Load_Control_Signal(const std::string& csv_path) {
         const size_t N = joints_.size();
         const size_t expected = 2 * N; //N amp, N-1 phase, 1 frequency
@@ -338,7 +641,7 @@ private:
     double step_size_ = 0.001;
     const double record_time_ = 4.0;
     const double stop_time_   = 6.1;
-    const double scaling      = 1000.0; 
+    const double scaling      = 1000.0;
 
     bool output_files_initialized_ = false;
 
@@ -346,13 +649,17 @@ private:
     std::vector<gz::sim::Joint> joints_;
     std::vector<std::string> joint_names_;
     std::vector<JointParam> joint_params_;
-    std::vector<double> izz_eff_;   
+    std::vector<double> izz_eff_;
 
-    // Output files
+    // Recording parameters
+    std::vector<gz::sim::Link> chain_;     // head, then child link of each joint
+    std::vector<double> chain_mass_;
+
+    // Debugging Output files
     std::ofstream act_out_;
     std::ofstream volt_out_;
 
-    // Control signals
+    // Open-loop control signals
     double frequency_ = 0.0;
     std::vector<double> amp_;
     std::vector<double> phase_;
@@ -364,6 +671,34 @@ private:
     std::vector<double> torque_act_;
     std::vector<double> torque_rec_;
     std::vector<double> torque_spring_;
+
+    // ---- external step control state ----
+    bool external_control_ = false;
+    gz::transport::Node node_;
+    std::atomic<bool> paused_{true};        // last value seen in PreUpdate; the sim starts paused
+    gz::sim::Link head_{gz::sim::kNullEntity};
+    bool have_head_ = false;
+    std::chrono::milliseconds idle_timeout_{30000};
+    std::chrono::milliseconds reply_timeout_{10000};
+
+    std::mutex svc_mtx_;                    // one service call at a time
+    std::mutex mtx_;                        // guards everything below marked 
+    std::condition_variable cv_;
+    bool stop_ = false;                     // 
+    bool has_request_ = false;              // 
+    bool release_ = false;                  //  client asked the gate to stop waiting
+    std::vector<double> pending_seq_;       // 
+    int64_t pending_n_ = 0;                 // 
+    bool waiting_reply_ = false;            //  a request is being executed
+    bool reply_ready_ = false;              // 
+    gz::msgs::Double_V reply_;              // 
+    bool gave_up_ = false;                  // (m, but only the sim thread reads it in the hot path)
+
+    // sim-thread only
+    int64_t steps_left_ = 0;
+    int64_t ext_idx_ = 0;
+    std::vector<double> ext_seq_;
+    std::vector<double> ext_now_;
 };
 }  // namespace mubot
 
