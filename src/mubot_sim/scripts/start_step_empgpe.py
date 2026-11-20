@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 RL training for MUBot (ROS 2 Jazzy + Gazebo Harmonic).
-Uncomplete. Lock-step control inplemented. Not connect to PPO yet.
+Uncomplete. Lock-step control inplemented. 
 
 Run from a shell where ROS and the workspace are sourced:
     python start_empgpe.py --wk-id default
@@ -22,9 +22,9 @@ import pandas as pd
 from EM_pgpe import EMPGPE
 from mubot_rob_env import (MubotEnv, sinusoid_voltages, DT, CTRL_STEPS, drift_metrics_from_obs, eval_window)
 
-FAIL_REWARD = -10.0     # reward given to a rollout that still fails after retries
-MAX_RETRY = 2           # extra attempts per rollout
-MAX_SIM_TIME = 6.5    # give up if terminate.txt never appears
+FAIL_REWARD = -10.0
+MAX_RETRY = 2
+MAX_SIM_TIME = 6.5
 
 
 class MubotPGPE:
@@ -81,19 +81,19 @@ class MubotPGPE:
                     n = min(CTRL_STEPS, max_steps - steps)
                     volts = (sinusoid_voltages(control, it0 + steps, n)
                             if policy is None else policy(obs))
-                    obs = self.env.advance(volts, n)      # obs after this control step
+                    obs = self.env.advance(volts, n)
                     traj.append(obs)
                     steps += n
                 self.env.finish()
                 self.last_traj = traj
-                t0, t1 = eval_window(abs(control[-1]))          # control = the rounded array in this function
+                t0, t1 = eval_window(abs(control[-1]))
                 stats = drift_metrics_from_obs(traj, t0, t1)
                 if not np.all(np.isfinite(stats)):
                     raise RuntimeError("no observations inside the evaluation window")
                 reward = self.env.reward(stats)                 
                 self.env.cleanup_outputs()
                 return stats, reward
-            except (RuntimeError, TimeoutError) as e:     # StepError is a RuntimeError
+            except (RuntimeError, TimeoutError) as e:
                 print(f"\033[91m rollout failed (attempt {attempt+1}/{MAX_RETRY+1}): {e}\033[0m")
                 self.env.abort()
         self.env.cleanup_outputs()
@@ -139,7 +139,6 @@ class MubotPGPE:
                 idx = x * n_rollout + y
                 temp_input = record_cpg[idx, :]
                 temp_input = np.array([10,10,-0.1,10,-.2,10,-.3,10,-.4,10,-.5,10,-.6,2])
-                # record_sta[idx, :], record_reward[x, y] = self._rollout(temp_input)
                 record_sta[idx, :], record_reward[x, y] = self._step_rollout(temp_input)
                 mo_y = 'w' if (x == 0 and y == 0) else 'a'
                 self._csv_write('history_rollout.csv', np.hstack((temp_input, record_reward[x, y])), mode=mo_y)
@@ -218,7 +217,7 @@ def main():
         if cpg is not None:
             print("best control:", np.array2string(cpg, precision=4))
     finally:
-        pgpe.env.shutdown()     # kills any sim still running, also on Ctrl-C
+        pgpe.env.shutdown()
 
 
 if __name__ == '__main__':
