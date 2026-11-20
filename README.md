@@ -183,11 +183,11 @@ Each worker uses its own `GZ_PARTITION`, `ROS_DOMAIN_ID` and log directory, so s
 - [x] Launch files, world and spawn flow
 - [x] EM-PGPE training loop on ROS 2
 - [x] Validate the ported plugins against Classic results (velocity, lateral drift, forces)
-- [ ] CI: build and a headless smoke-test rollout
+- [x] CI: build and a headless smoke-test rollout
 - [ ] Docker image
 
 **Phase 2: Control**
-- [ ] Open-loop CPG controller node in `mubot_control`
+- [x] Open-loop CPG controller node in `mubot_control`
 - [ ] Steering and speed commands (`/cmd_vel`-style interface)
 - [ ] Closed-loop heading and depth control
 - [ ] Learned or optimized gait library, with a switcher
